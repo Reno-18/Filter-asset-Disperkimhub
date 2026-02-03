@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Data{% endblock %}
+
+{% block content %}
+<div class="page-header mb-4">
+    <h1 class="page-title">
+        <i class="bi bi-cloud-upload me-2"></i>Upload Data Excel
+    </h1>
+    <p class="text-muted mb-0">Upload file Excel (.xls atau .xlsx) untuk memproses data aset</p>
+</div>
+
+<div class="row g-4">
+    <!-- Upload Form -->
+    <div class="col-lg-6">
+        <div class="card upload-card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-file-earmark-excel me-2"></i>Pilih File
+                </h5>
+            </div>
+            <div class="card-body">
+                <form action="{{ url_for('upload') }}" method="POST" enctype="multipart/form-data" id="upload-form">
+                    {{ form.hidden_tag() }}
+
+                    <!-- Drag & Drop Area -->
+                    <div class="drop-zone" id="drop-zone">
+                        <div class="drop-zone-content">
+                            <i class="bi bi-cloud-arrow-up display-3 text-primary mb-3"></i>
+                            <h5>Drag & drop file Excel di sini</h5>
+                            <p class="text-muted mb-3">atau</p>
+                            <label for="file" class="btn btn-primary">
+                                <i class="bi bi-folder2-open me-1"></i> Pilih File
+                            </label>
+                            <input type="file" id="file" name="file" accept=".xls,.xlsx" class="d-none">
+                        </div>
+                        <div class="drop-zone-file d-none" id="file-info">
+                            <i class="bi bi-file-earmark-excel display-4 text-success mb-2"></i>
+                            <p class="file-name mb-0" id="file-name"></p>
+                            <small class="text-muted" id="file-size"></small>
+                        </div>
+                    </div>
+
+                    {% if form.file.errors %}
+                    <div class="text-danger mt-2">
+                        {% for error in form.file.errors %}
+                        <small><i class="bi bi-exclamation-circle me-1"></i>{{ error }}</small><br>
+                        {% endfor %}
+                    </div>
+                    {% endif %}
+
+                    <div class="mt-4">
+                        <button type="submit" class="btn btn-success btn-lg w-100" id="upload-btn">
+                            <i class="bi bi-upload me-2"></i>Upload & Proses
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+
+        <!-- Instructions -->
+        <div class="card mt-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-info-circle me-2"></i>Petunjuk
+                </h5>
+            </div>
+            <div class="card-body">
+                <ul class="list-unstyled mb-0">
+                    <li class="mb-2">
+                        <i class="bi bi-check-circle text-success me-2"></i>
+                        Format file: .xls atau .xlsx
+                    </li>
+                    <li class="mb-2">
+                        <i class="bi bi-check-circle text-success me-2"></i>
+                        Ukuran maksimal: 10 MB
+                    </li>
+                    <li class="mb-2">
+                        <i class="bi bi-check-circle text-success me-2"></i>
+                        Struktur sesuai dengan format PRESENTASI.xls
+                    </li>
+                    <li class="mb-2">
+                        <i class="bi bi-exclamation-triangle text-warning me-2"></i>
+                        Upload baru akan mengganti data sebelumnya
+                    </li>
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Status & Preview -->
+    <div class="col-lg-6">
+        <!-- Current Status -->
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-database me-2"></i>Status Data Saat Ini
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="d-flex align-items-center justify-content-between">
+                    <div>
+                        <h2 class="mb-0">{{ current_count or 0 }}</h2>
+                        <p class="text-muted mb-0">Total Records</p>
+                    </div>
+                    {% if current_count and current_count > 0 %}
+                    <span class="badge bg-success fs-6">
+                        <i class="bi bi-check-circle me-1"></i>Data Aktif
+                    </span>
+                    {% else %}
+                    <span class="badge bg-secondary fs-6">
+                        <i class="bi bi-clock me-1"></i>Belum Ada Data
+                    </span>
+                    {% endif %}
+                </div>
+
+                {% if last_upload %}
+                <hr>
+                <small class="text-muted">
+                    <i class="bi bi-clock-history me-1"></i>
+                    Upload terakhir: {{ last_upload.filename }}
+                    ({{ last_upload.uploaded_at.strftime('%d/%m/%Y %H:%M') }})
+                    <span class="badge bg-{{ 'success' if last_upload.status == 'success' else 'danger' }}">
+                        {{ last_upload.status }}
+                    </span>
+                </small>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Sample Data Preview (shown after successful upload) -->
+        {% if success and sample_assets %}
+        <div class="card">
+            <div class="card-header bg-success text-white">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-check-circle me-2"></i>Upload Berhasil!
+                </h5>
+            </div>
+            <div class="card-body">
+                <div class="alert alert-success">
+                    <strong>{{ stats.valid_rows }}</strong> data berhasil diproses dari
+                    <strong>{{ stats.total_rows_read }}</strong> baris total.
+                    {% if stats.skipped_rows > 0 %}
+                    <br><small>{{ stats.skipped_rows }} baris dilewati (header/summary)</small>
+                    {% endif %}
+                </div>
+
+                <h6 class="mb-3">Sample Data (10 pertama):</h6>
+                <div class="table-responsive">
+                    <table class="table table-sm table-striped">
+                        <thead class="table-dark">
+                            <tr>
+                                <th>Nama Asset</th>
+                                <th>Kecamatan</th>
+                                <th>Luas</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for asset in sample_assets %}
+                            <tr>
+                                <td>{{ asset.nama_asset[:50] }}...</td>
+                                <td>{{ asset.kecamatan or '-' }}</td>
+                                <td>{{ "%.2f"|format(asset.luas) if asset.luas else '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+
+                <a href="{{ url_for('index') }}" class="btn btn-primary w-100">
+                    <i class="bi bi-arrow-right me-1"></i> Lihat Dashboard
+                </a>
+            </div>
+        </div>
+        {% else %}
+        <!-- Expected Format -->
+        <div class="card">
+            <div class="card-header">
+                <h5 class="card-title mb-0">
+                    <i class="bi bi-table me-2"></i>Format Data yang Didukung
+                </h5>
+            </div>
+            <div class="card-body">
+                <p class="text-muted">Kolom yang akan diekstrak dari file Excel:</p>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <ul class="list-unstyled small">
+                            <li><i class="bi bi-check text-success me-1"></i>Jenis Barang / Nama Barang</li>
+                            <li><i class="bi bi-check text-success me-1"></i>KECAMATAN</li>
+                            <li><i class="bi bi-check text-success me-1"></i>Luas (m2)</li>
+                            <li><i class="bi bi-check text-success me-1"></i>Satuan Kerja</li>
+                            <li><i class="bi bi-check text-success me-1"></i>Tahun</li>
+                        </ul>
+                    </div>
+                    <div class="col-6">
+                        <ul class="list-unstyled small">
+                            <li><i class="bi bi-check text-success me-1"></i>Status Tanah</li>
+                            <li><i class="bi bi-check text-success me-1"></i>CATATAN</li>
+                            <li><i class="bi bi-check text-success me-1"></i>K3</li>
+                            <li><i class="bi bi-check text-success me-1"></i>PEMETAAN ASET</li>
+                            <li><i class="bi bi-check text-success me-1"></i>Nilai / Harga</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file');
+    const fileInfo = document.getElementById('file-info');
+    const fileName = document.getElementById('file-name');
+    const fileSize = document.getElementById('file-size');
+    const uploadForm = document.getElementById('upload-form');
+    const uploadBtn = document.getElementById('upload-btn');
+
+    // Drag & drop handlers
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, preventDefaults, false);
+    });
+
+    function preventDefaults(e) {
+        e.preventDefault();
+        e.stopPropagation();
+    }
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+            dropZone.classList.add('drop-zone-active');
+        });
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => {
+            dropZone.classList.remove('drop-zone-active');
+        });
+    });
+
+    dropZone.addEventListener('drop', (e) => {
+        const files = e.dataTransfer.files;
+        if (files.length) {
+            fileInput.files = files;
+            updateFileInfo(files[0]);
+        }
+    });
+
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length) {
+            updateFileInfo(e.target.files[0]);
+        }
+    });
+
+    function updateFileInfo(file) {
+        fileName.textContent = file.name;
+        fileSize.textContent = formatFileSize(file.size);
+
+        dropZone.querySelector('.drop-zone-content').classList.add('d-none');
+        fileInfo.classList.remove('d-none');
+    }
+
+    function formatFileSize(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
+    // Show loading on submit
+    uploadForm.addEventListener('submit', () => {
+        uploadBtn.disabled = true;
+        uploadBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Memproses...';
+        document.getElementById('loading-overlay').classList.remove('d-none');
+    });
+
+    // Update sidebar stats
+    document.getElementById('total-records').textContent = '{{ current_count or 0 }}';
+</script>
+{% endblock %}

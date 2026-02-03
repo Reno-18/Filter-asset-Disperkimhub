@@ -1,0 +1,443 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header mb-4">
+    <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+        <div>
+            <h1 class="page-title">
+                Dashboard Aset
+            </h1>
+            <p class="text-muted mb-0">Filter dan kelola data aset dengan mudah</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('upload') }}" class="btn btn-primary">
+                <i class="bi bi-plus-lg"></i>
+                <span>Upload Data</span>
+            </a>
+            <form action="{{ url_for('clear_data') }}" method="POST" class="d-inline"
+                onsubmit="return confirm('Apakah Anda yakin ingin menghapus semua data?');">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <button type="submit" class="btn btn-outline-danger">
+                    <i class="bi bi-trash3"></i>
+                    <span class="d-none d-sm-inline">Hapus Semua</span>
+                </button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<!-- Statistics Cards - The "Wow" Factor -->
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-primary">
+                <i class="bi bi-database"></i>
+            </div>
+            <div class="stat-content">
+                <h3 class="stat-value">{{ total_count }}</h3>
+                <p class="stat-label">Total Data</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-success">
+                <i class="bi bi-funnel"></i>
+            </div>
+            <div class="stat-content">
+                <h3 class="stat-value">{{ filtered_count }}</h3>
+                <p class="stat-label">Hasil Filter</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-info">
+                <i class="bi bi-geo-alt"></i>
+            </div>
+            <div class="stat-content">
+                <h3 class="stat-value">{{ options.kecamatan_choices|length - 1 }}</h3>
+                <p class="stat-label">Kecamatan</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+        <div class="stat-card">
+            <div class="stat-icon bg-warning">
+                <i class="bi bi-tag"></i>
+            </div>
+            <div class="stat-content">
+                <h3 class="stat-value">{{ options.status_choices|length }}</h3>
+                <p class="stat-label">Status Unik</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Integrated Filter Section -->
+<div class="card filter-card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-sliders2"></i>
+            Filter Data
+        </h5>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('export_csv') }}?{{ request.query_string.decode() }}"
+                class="btn btn-outline-success btn-sm">
+                <i class="bi bi-download"></i>
+                <span class="d-none d-md-inline">CSV</span>
+            </a>
+            <a href="{{ url_for('export_excel') }}?{{ request.query_string.decode() }}"
+                class="btn btn-outline-success btn-sm">
+                <i class="bi bi-file-earmark-excel"></i>
+                <span class="d-none d-md-inline">Excel</span>
+            </a>
+        </div>
+    </div>
+    <div class="card-body">
+        <form action="{{ url_for('index') }}" method="GET" id="filter-form">
+            <!-- Row 1: Basic Filters -->
+            <div class="row g-3 mb-3">
+                <!-- Nama Asset -->
+                <div class="col-md-6 col-lg-3">
+                    <label for="nama_asset" class="form-label">Nama Asset</label>
+                    <div class="input-group">
+                        <span class="input-group-text"><i class="bi bi-search"></i></span>
+                        <input type="text" class="form-control" id="nama_asset" name="nama_asset"
+                            value="{{ filters.nama_asset }}" placeholder="Cari nama asset...">
+                    </div>
+                </div>
+
+                <!-- Kecamatan -->
+                <div class="col-md-6 col-lg-3">
+                    <label for="kecamatan" class="form-label">Kecamatan</label>
+                    <select class="form-select" id="kecamatan" name="kecamatan">
+                        {% for value, label in options.kecamatan_choices %}
+                        <option value="{{ value }}" {% if filters.kecamatan==value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Luas Range -->
+                <div class="col-md-6 col-lg-3">
+                    <label class="form-label">Luas (m²)</label>
+                    <div class="input-group">
+                        <input type="number" class="form-control" id="min_luas" name="min_luas"
+                            value="{{ filters.min_luas if filters.min_luas is not none else '' }}" placeholder="Min"
+                            step="0.01" min="0">
+                        <span class="input-group-text">—</span>
+                        <input type="number" class="form-control" id="max_luas" name="max_luas"
+                            value="{{ filters.max_luas if filters.max_luas is not none else '' }}" placeholder="Max"
+                            step="0.01" min="0">
+                    </div>
+                </div>
+
+                <!-- Status Tanah -->
+                <div class="col-md-6 col-lg-3">
+                    <label for="status_tanah" class="form-label">Status Tanah</label>
+                    <select class="form-select" id="status_tanah" name="status_tanah">
+                        <option value="">Semua Status</option>
+                        <option value="__BLANK__" {% if filters.status_tanah=='__BLANK__' %}selected{% endif %}>⚠️ Belum
+                            Diisi</option>
+                        {% for value, label in options.status_tanah_choices %}
+                        <option value="{{ value }}" {% if filters.status_tanah==value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Row 2: Status Filters -->
+            <div class="row g-3 mb-3">
+                <!-- Pemetaan -->
+                <div class="col-md-6 col-lg-2">
+                    <label for="pemetaan" class="form-label">Pemetaan</label>
+                    <select class="form-select" id="pemetaan" name="pemetaan">
+                        <option value="">Semua</option>
+                        <option value="__BLANK__" {% if filters.pemetaan=='__BLANK__' %}selected{% endif %}>⚠️ Belum
+                            Diisi</option>
+                        {% for value, label in options.pemetaan_choices %}
+                        <option value="{{ value }}" {% if filters.pemetaan==value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Catatan -->
+                <div class="col-md-6 col-lg-2">
+                    <label for="catatan" class="form-label">Catatan</label>
+                    <select class="form-select" id="catatan" name="catatan">
+                        <option value="">Semua</option>
+                        <option value="__BLANK__" {% if filters.catatan=='__BLANK__' %}selected{% endif %}>⚠️ Belum
+                            Diisi</option>
+                        {% for value, label in options.catatan_choices %}
+                        <option value="{{ value }}" {% if filters.catatan==value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- K3 -->
+                <div class="col-md-6 col-lg-2">
+                    <label for="k3" class="form-label">K3</label>
+                    <select class="form-select" id="k3" name="k3">
+                        <option value="">Semua</option>
+                        <option value="__BLANK__" {% if filters.k3=='__BLANK__' %}selected{% endif %}>⚠️ Belum Diisi
+                        </option>
+                        {% for value, label in options.k3_choices %}
+                        <option value="{{ value }}" {% if filters.k3==value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Tanah/Bangunan -->
+                <div class="col-md-6 col-lg-2">
+                    <label for="tanah_bangunan" class="form-label">Tanah/Bangunan</label>
+                    <select class="form-select" id="tanah_bangunan" name="tanah_bangunan">
+                        <option value="">Semua</option>
+                        <option value="__BLANK__" {% if filters.tanah_bangunan=='__BLANK__' %}selected{% endif %}>⚠️
+                            Belum Diisi</option>
+                        {% for value, label in options.tanah_bangunan_choices %}
+                        <option value="{{ value }}" {% if filters.tanah_bangunan==value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Asal Usul -->
+                <div class="col-md-6 col-lg-2">
+                    <label for="asal_usul" class="form-label">Asal Usul</label>
+                    <select class="form-select" id="asal_usul" name="asal_usul">
+                        <option value="">Semua</option>
+                        <option value="__BLANK__" {% if filters.asal_usul=='__BLANK__' %}selected{% endif %}>⚠️ Belum
+                            Diisi</option>
+                        {% for value, label in options.asal_usul_choices %}
+                        <option value="{{ value }}" {% if filters.asal_usul==value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Lain-lain -->
+                <div class="col-md-6 col-lg-2">
+                    <label for="lain_lain" class="form-label">Lain-lain</label>
+                    <select class="form-select" id="lain_lain" name="lain_lain">
+                        <option value="">Semua</option>
+                        <option value="__BLANK__" {% if filters.lain_lain=='__BLANK__' %}selected{% endif %}>⚠️ Belum
+                            Diisi</option>
+                        {% for value, label in options.lain_lain_choices %}
+                        <option value="{{ value }}" {% if filters.lain_lain==value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="d-flex gap-2 pt-2" style="border-top: 1px solid var(--slate-100);">
+                <button type="submit" class="btn btn-primary">
+                    <i class="bi bi-funnel"></i>
+                    Terapkan Filter
+                </button>
+                <a href="{{ url_for('index') }}" class="btn btn-outline-secondary">
+                    <i class="bi bi-x-lg"></i>
+                    Reset
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Results Table -->
+<div class="card">
+    <div class="card-header d-flex justify-content-between align-items-center">
+        <h5 class="card-title mb-0">
+            <i class="bi bi-table"></i>
+            Data Aset
+        </h5>
+        <span class="badge bg-secondary">
+            {{ assets|length }} / {{ filtered_count }} data
+        </span>
+    </div>
+    <div class="card-body p-0">
+        {% if assets %}
+        <div class="table-responsive">
+            <table class="table table-hover mb-0">
+                <thead class="table-dark sticky-top">
+                    <tr>
+                        {% set columns = [
+                        ('no_urut', 'No'),
+                        ('nama_asset', 'Nama Asset'),
+                        ('satuan_kerja', 'Satuan Kerja'),
+                        ('kecamatan', 'Kecamatan'),
+                        ('luas', 'Luas (m²)'),
+                        ('tahun', 'Tahun'),
+                        ('status_combined', 'Status'),
+                        ('nilai_harga', 'Nilai (Rp)')
+                        ] %}
+                        {% for col_key, col_label in columns %}
+                        <th class="sortable" data-sort="{{ col_key }}">
+                            {{ col_label }}
+                            {% if sort_by == col_key %}
+                            <i class="bi bi-arrow-{{ 'up' if sort_order == 'asc' else 'down' }}"></i>
+                            {% endif %}
+                        </th>
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for asset in assets %}
+                    <tr>
+                        <td>{{ asset.no_urut or '-' }}</td>
+                        <td class="text-wrap" style="max-width: 250px;">
+                            <strong>{{ asset.nama_asset or '-' }}</strong>
+                            {% if asset.kode_aset %}
+                            <br><small class="text-muted">{{ asset.kode_aset }}</small>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="badge bg-info">{{ asset.satuan_kerja or '-' }}</span>
+                        </td>
+                        <td>{{ asset.kecamatan or '-' }}</td>
+                        <td class="text-end">{{ "%.2f"|format(asset.luas) if asset.luas else '-' }}</td>
+                        <td class="text-center">{{ asset.tahun or '-' }}</td>
+                        <td style="max-width: 200px;">
+                            {% if asset.status_combined %}
+                            {% for status in asset.status_combined.split('|') %}
+                            <span
+                                class="badge bg-{{ 'success' if 'TERMANFAATKAN' in status or 'BERSERTIFIKAT' in status else 'warning' if 'TERLANTAR' in status or 'BELUM' in status else 'secondary' }} mb-1">
+                                {{ status.strip() }}
+                            </span>
+                            {% endfor %}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if asset.nilai_harga %}
+                            {{ "{:,.0f}".format(asset.nilai_harga) }}
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if pagination.pages > 1 %}
+        <div class="card-footer">
+            <nav aria-label="Page navigation">
+                <ul class="pagination justify-content-center mb-0">
+                    {% if pagination.has_prev %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('index', page=pagination.prev_num, **filters) }}">
+                            <i class="bi bi-chevron-left"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+
+                    {% for page_num in pagination.iter_pages(left_edge=1, left_current=2, right_current=2, right_edge=1)
+                    %}
+                    {% if page_num %}
+                    <li class="page-item {% if page_num == pagination.page %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('index', page=page_num, **filters) }}">
+                            {{ page_num }}
+                        </a>
+                    </li>
+                    {% else %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                    {% endfor %}
+
+                    {% if pagination.has_next %}
+                    <li class="page-item">
+                        <a class="page-link" href="{{ url_for('index', page=pagination.next_num, **filters) }}">
+                            <i class="bi bi-chevron-right"></i>
+                        </a>
+                    </li>
+                    {% endif %}
+                </ul>
+            </nav>
+        </div>
+        {% endif %}
+
+        {% else %}
+        <!-- Modern Empty State -->
+        <div class="text-center py-5">
+            <div class="icon-wrapper"
+                style="width: 80px; height: 80px; background: var(--slate-100, #f1f5f9); border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 0 auto 1.5rem;">
+                <i class="bi bi-inbox" style="font-size: 2rem; color: var(--slate-400, #94a3b8);"></i>
+            </div>
+            <h4 class="mt-3" style="color: var(--slate-700, #334155); font-weight: 600;">
+                {% if total_count == 0 %}
+                Belum ada data
+                {% else %}
+                Tidak ada hasil
+                {% endif %}
+            </h4>
+            <p class="text-muted" style="max-width: 320px; margin: 0.5rem auto 1.5rem;">
+                {% if total_count == 0 %}
+                Upload file Excel untuk mulai mengelola data aset Anda.
+                {% else %}
+                Coba sesuaikan filter untuk menemukan data yang Anda cari.
+                {% endif %}
+            </p>
+            {% if total_count == 0 %}
+            <a href="{{ url_for('upload') }}" class="btn btn-primary">
+                <i class="bi bi-cloud-arrow-up"></i>
+                Upload Sekarang
+            </a>
+            {% else %}
+            <a href="{{ url_for('index') }}" class="btn btn-outline-primary">
+                <i class="bi bi-arrow-counterclockwise"></i>
+                Reset Filter
+            </a>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+    // Handle sortable columns
+    document.querySelectorAll('.sortable').forEach(th => {
+        th.style.cursor = 'pointer';
+        th.addEventListener('click', function () {
+            const sortBy = this.dataset.sort;
+            const currentSort = '{{ sort_by }}';
+            const currentOrder = '{{ sort_order }}';
+
+            let newOrder = 'asc';
+            if (sortBy === currentSort && currentOrder === 'asc') {
+                newOrder = 'desc';
+            }
+
+            const url = new URL(window.location.href);
+            url.searchParams.set('sort', sortBy);
+            url.searchParams.set('order', newOrder);
+            window.location.href = url.toString();
+        });
+    });
+
+    // Update total records in sidebar
+    document.getElementById('total-records').textContent = '{{ total_count }}';
+</script>
+{% endblock %}
