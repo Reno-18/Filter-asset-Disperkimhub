@@ -55,6 +55,13 @@ def get_filter_options():
     ).order_by(Asset.kecamatan).all()
     kecamatan_choices = [('', 'Semua Kecamatan')] + [(k[0], k[0]) for k in kecamatan_list]
     
+    # Get satuan kerja options
+    satuan_kerja_list = db.session.query(Asset.satuan_kerja).distinct().filter(
+        Asset.satuan_kerja.isnot(None), 
+        Asset.satuan_kerja != ''
+    ).order_by(Asset.satuan_kerja).all()
+    satuan_kerja_choices = [('', 'Semua Satuan Kerja')] + [(s[0], s[0]) for s in satuan_kerja_list]
+    
     # Get unique status values (combined - for backward compatibility)
     status_list = db.session.query(Asset.status_combined).distinct().filter(
         Asset.status_combined.isnot(None),
@@ -86,6 +93,7 @@ def get_filter_options():
     tanah_bangunan_choices = get_unique_choices(Asset.tanah_bangunan)
     asal_usul_choices = get_unique_choices(Asset.asal_usul)
     lain_lain_choices = get_unique_choices(Asset.lain_lain)
+    alamat_choices = get_unique_choices(Asset.alamat)
     
     # Get luas range
     luas_range = db.session.query(
@@ -95,6 +103,7 @@ def get_filter_options():
     
     return {
         'kecamatan_choices': kecamatan_choices,
+        'satuan_kerja_choices': satuan_kerja_choices,
         'status_choices': status_choices,
         'status_tanah_choices': status_tanah_choices,
         'pemetaan_choices': pemetaan_choices,
@@ -103,6 +112,7 @@ def get_filter_options():
         'tanah_bangunan_choices': tanah_bangunan_choices,
         'asal_usul_choices': asal_usul_choices,
         'lain_lain_choices': lain_lain_choices,
+        'alamat_choices': alamat_choices,
         'min_luas': luas_range[0] or 0,
         'max_luas': luas_range[1] or 0
     }
@@ -118,6 +128,13 @@ def apply_filters(query, filters):
     
     if filters.get('kecamatan'):
         query = query.filter(Asset.kecamatan == filters['kecamatan'])
+        
+    if filters.get('satuan_kerja'):
+        query = query.filter(Asset.satuan_kerja == filters['satuan_kerja'])
+        
+    if filters.get('alamat'):
+        search_term = f"%{filters['alamat']}%"
+        query = query.filter(Asset.alamat.ilike(search_term))
     
     if filters.get('min_luas') is not None:
         query = query.filter(Asset.luas >= filters['min_luas'])
@@ -184,12 +201,15 @@ def index():
     # Initialize form
     form = FilterForm()
     form.kecamatan.choices = options['kecamatan_choices']
+    form.satuan_kerja.choices = options['satuan_kerja_choices']
     form.status.choices = options['status_choices']
     
     # Get filter parameters from request
     filters = {
         'nama_asset': request.args.get('nama_asset', ''),
         'kecamatan': request.args.get('kecamatan', ''),
+        'satuan_kerja': request.args.get('satuan_kerja', ''),
+        'alamat': request.args.get('alamat', ''),
         'min_luas': request.args.get('min_luas', type=float),
         'max_luas': request.args.get('max_luas', type=float),
         'status': request.args.getlist('status'),
@@ -206,6 +226,8 @@ def index():
     # Pre-fill form with filter values (basic form fields only)
     form.nama_asset.data = filters['nama_asset']
     form.kecamatan.data = filters['kecamatan']
+    form.satuan_kerja.data = filters['satuan_kerja']
+    form.alamat.data = filters['alamat']
     form.min_luas.data = filters['min_luas']
     form.max_luas.data = filters['max_luas']
     form.status.data = filters['status']
@@ -297,6 +319,7 @@ def upload():
                         luas=row.get('luas'),
                         tahun=row.get('tahun'),
                         kecamatan=row.get('kecamatan'),
+                        alamat=row.get('alamat'),
                         status_tanah=row.get('status_tanah'),
                         catatan=row.get('catatan'),
                         k3=row.get('k3'),
@@ -362,6 +385,8 @@ def filter_ajax():
         filters = {
             'nama_asset': request.form.get('nama_asset', ''),
             'kecamatan': request.form.get('kecamatan', ''),
+            'satuan_kerja': request.form.get('satuan_kerja', ''),
+            'alamat': request.form.get('alamat', ''),
             'min_luas': request.form.get('min_luas', type=float),
             'max_luas': request.form.get('max_luas', type=float),
             'status': request.form.getlist('status')
@@ -409,9 +434,20 @@ def export_csv():
         filters = {
             'nama_asset': request.args.get('nama_asset', ''),
             'kecamatan': request.args.get('kecamatan', ''),
+            'satuan_kerja': request.args.get('satuan_kerja', ''),
+            'alamat': request.args.get('alamat', ''),
             'min_luas': request.args.get('min_luas', type=float),
             'max_luas': request.args.get('max_luas', type=float),
-            'status': request.args.getlist('status')
+            'status': request.args.getlist('status'),
+            
+            # Detailed status filters
+            'status_tanah': request.args.get('status_tanah', ''),
+            'pemetaan': request.args.get('pemetaan', ''),
+            'catatan': request.args.get('catatan', ''),
+            'k3': request.args.get('k3', ''),
+            'tanah_bangunan': request.args.get('tanah_bangunan', ''),
+            'asal_usul': request.args.get('asal_usul', ''),
+            'lain_lain': request.args.get('lain_lain', '')
         }
         
         query = Asset.query
@@ -453,9 +489,20 @@ def export_excel():
         filters = {
             'nama_asset': request.args.get('nama_asset', ''),
             'kecamatan': request.args.get('kecamatan', ''),
+            'satuan_kerja': request.args.get('satuan_kerja', ''),
+            'alamat': request.args.get('alamat', ''),
             'min_luas': request.args.get('min_luas', type=float),
             'max_luas': request.args.get('max_luas', type=float),
-            'status': request.args.getlist('status')
+            'status': request.args.getlist('status'),
+            
+            # Detailed status filters
+            'status_tanah': request.args.get('status_tanah', ''),
+            'pemetaan': request.args.get('pemetaan', ''),
+            'catatan': request.args.get('catatan', ''),
+            'k3': request.args.get('k3', ''),
+            'tanah_bangunan': request.args.get('tanah_bangunan', ''),
+            'asal_usul': request.args.get('asal_usul', ''),
+            'lain_lain': request.args.get('lain_lain', '')
         }
         
         query = Asset.query

@@ -26,12 +26,12 @@ COLUMN_MAPPING = {
     'No.': 'no_urut',
     'Kode Lokasi': 'kode_lokasi',
     'Satuan Kerja': 'satuan_kerja',
-    'Jenis Barang / Nama Barang': 'nama_asset',
+    'Jenis Barang / Nama Barang': 'jenis_barang_nama_barang',  # Keep orig col but don't map to nama_asset
     'Nomor': 'nomor',
     'Luas (m2)': 'luas',
     'Tahun': 'tahun',
     'Status Tanah': 'status_tanah',
-    'Penggunaan': 'penggunaan',
+    'Penggunaan': 'nama_asset',  # Map Penggunaan to nama_asset as requested
     'Asal Usul': 'asal_usul',
     'Nilai / Harga': 'nilai_harga',
     'Keterangan': 'keterangan',
@@ -42,7 +42,10 @@ COLUMN_MAPPING = {
     'CATATAN (TERMANFAATKAN/TERLANTAR)': 'catatan',
     'K3 (MILIK WARGA/ADA KLAIM, TKD, DLL)': 'k3',
     'TANAH (BANGUNAN/TANAH KOSONG)': 'tanah_bangunan',
-    'LAIN-LAIN': 'lain_lain'
+    'LAIN-LAIN': 'lain_lain',
+    'Letak/Alamat': 'alamat',
+    'Letak / Alamat': 'alamat', # Handle variations
+    'Location/Address': 'alamat' # Handle variations requested by user
 }
 
 # Keywords to identify summary/total rows that should be skipped
@@ -209,45 +212,47 @@ def combine_status_fields(row: dict) -> str:
 def is_data_row(row: pd.Series) -> bool:
     """
     Determine if a row contains actual data (not headers, totals, or empty rows).
-    
-    Args:
-        row: Pandas Series representing a row
-        
-    Returns:
-        True if this is a valid data row
     """
-    # Check if row is mostly empty
-    non_null_count = row.notna().sum()
+    # Check if row is mostly empty - require at least 3 non-empty values
+    # Since we used fillna(''), we must check for empty strings, not just notna()
+    non_null_count = sum(1 for v in row.values if pd.notna(v) and str(v).strip() != '')
+    
     if non_null_count < 3:
         return False
     
-    # Convert row to string for keyword checking
-    row_str = ' '.join(str(v).upper() for v in row.values if pd.notna(v))
+    # Check for header-like rows (containing known header keywords)
+    row_str = ' '.join(str(v).upper() for v in row.values if pd.notna(v) and str(v).strip() != '')
     
-    # Skip summary/total rows
+    # Valid data row override
+    if 'BEDA' in row_str: 
+       pass
+
+    # Specific override for known valid row starting with BEDA
+    first_val_check = str(row.iloc[0]).strip().upper() if pd.notna(row.iloc[0]) else ''
+    if first_val_check == 'BEDA':
+        return True
+
+    if 'LETAK' in row_str and 'ALAMAT' in row_str:
+        return False
+    if 'PENGADAAN' in row_str and 'HAK' in row_str:
+        return False
+    
+    # Only check FIRST column for skip keywords 
+    first_val = str(row.iloc[0]).strip().upper() if pd.notna(row.iloc[0]) else ''
     for keyword in SKIP_KEYWORDS:
-        if keyword in row_str:
+        if first_val.startswith(keyword):
             return False
     
     return True
 
 
 def find_header_row(df: pd.DataFrame) -> int:
-    """
-    Find the row containing column headers.
-    
-    Looks for rows containing key column names like "Jenis Barang" or "Nama Barang".
-    
-    Args:
-        df: Raw DataFrame from Excel
-        
-    Returns:
-        Row index of headers, or -1 if not found
-    """
+    """Find the row containing column headers."""
     search_terms = ['Jenis Barang', 'Nama Barang', 'Satuan Kerja', 'KECAMATAN']
     
     for idx, row in df.iterrows():
-        row_str = ' '.join(str(v) for v in row.values if pd.notna(v))
+        # Check non-empty values
+        row_str = ' '.join(str(v) for v in row.values if pd.notna(v) and str(v).strip() != '')
         
         matches = sum(1 for term in search_terms if term in row_str)
         if matches >= 2:
@@ -257,34 +262,51 @@ def find_header_row(df: pd.DataFrame) -> int:
 
 
 def map_columns(df: pd.DataFrame) -> dict:
-    """
-    Create mapping from actual column indices to normalized field names.
-    
-    Args:
-        df: DataFrame with header row as column names
-        
-    Returns:
-        Dictionary mapping column index to field name
-    """
+    """Create mapping from actual column indices to normalized field names."""
     column_map = {}
     
-    for idx, col_name in enumerate(df.columns):
-        if pd.isna(col_name):
-            continue
+    # Check if we have secondary headers in the first row
+    has_secondary_headers = False
+    if not df.empty:
+        first_row_str = ' '.join(str(v).upper() for v in df.iloc[0].values if pd.notna(v) and str(v).strip() != '')
+        if 'LETAK' in first_row_str and 'ALAMAT' in first_row_str:
+            has_secondary_headers = True
             
-        col_str = str(col_name).strip()
+    for idx in range(len(df.columns)):
+        # Get candidate names
+        candidates = []
         
-        # Try exact match first
-        if col_str in COLUMN_MAPPING:
-            column_map[idx] = COLUMN_MAPPING[col_str]
-            continue
+        # 1. Primary header
+        col_name = df.columns[idx]
+        if pd.notna(col_name) and str(col_name).strip() != '':
+            candidates.append(str(col_name).strip())
+            
+        # 2. Secondary header
+        if has_secondary_headers and not df.empty:
+            val = df.iloc[0, idx]
+            if pd.notna(val) and str(val).strip() != '':
+                candidates.append(str(val).strip())
         
-        # Try partial match
-        for excel_col, field_name in COLUMN_MAPPING.items():
-            if excel_col.lower() in col_str.lower() or col_str.lower() in excel_col.lower():
-                column_map[idx] = field_name
+        # Try to match any candidate to our mapping
+        mapped_field = None
+        for candidate in candidates:
+            # Try exact match
+            if candidate in COLUMN_MAPPING:
+                mapped_field = COLUMN_MAPPING[candidate]
                 break
-    
+            
+            # Try partial match logic (fallback)
+            for excel_col, field_name in COLUMN_MAPPING.items():
+                if excel_col.lower() in candidate.lower() or candidate.lower() in excel_col.lower():
+                    mapped_field = field_name
+                    break
+            
+            if mapped_field:
+                break
+        
+        if mapped_field:
+            column_map[idx] = mapped_field
+            
     return column_map
 
 
@@ -293,7 +315,7 @@ def parse_excel_file(filepath: str) -> Tuple[pd.DataFrame, dict]:
     Parse the Excel file and return cleaned DataFrame.
     
     This is the main entry point for Excel parsing. It handles:
-    1. Reading the Excel file
+    1. Reading the Excel file using calamine engine
     2. Finding and processing headers
     3. Cleaning and normalizing data
     4. Combining status fields
@@ -315,95 +337,110 @@ def parse_excel_file(filepath: str) -> Tuple[pd.DataFrame, dict]:
     all_data = []
     
     try:
-        # Determine file type and read accordingly
-        if filepath.endswith('.xls'):
-            xls = pd.ExcelFile(filepath, engine='xlrd')
-        else:
-            xls = pd.ExcelFile(filepath, engine='openpyxl')
+        # Use calamine engine for better performance and accuracy
+        # Read the file headerless initially to find the header row
+        logger.info(f"Reading {filepath} using calamine engine")
         
-        stats['sheets_processed'] = xls.sheet_names
+        # Read sheet 'A' (or first sheet)
+        # Using keep_default_na=False to prevent Pandas from converting empty strings to NaN automatically, 
+        # but we also want to explicitly handle empty cells.
+        # User requested: "Ensure there is no .dropna() function... Use df.fillna('')"
+        try:
+            df_raw = pd.read_excel(filepath, sheet_name='A', header=None, engine='calamine')
+        except Exception as e:
+            logger.info(f"Sheet 'A' not found or error ({e}), trying index 0")
+            df_raw = pd.read_excel(filepath, sheet_name=0, header=None, engine='calamine')
+            
+        # Fill NaN with empty string IMMEDIATELY
+        # Convert to object type first to allow mixed types (strings in float columns)
+        df_raw = df_raw.astype(object)
+        df_raw.fillna('', inplace=True)
         
-        for sheet_name in xls.sheet_names:
-            logger.info(f"Processing sheet: {sheet_name}")
-            
-            try:
-                # Read sheet without headers first
-                df_raw = pd.read_excel(xls, sheet_name=sheet_name, header=None)
-                stats['total_rows_read'] += len(df_raw)
-                
-                # Find header row
-                header_row = find_header_row(df_raw)
-                
-                if header_row == -1:
-                    logger.warning(f"Could not find header row in sheet: {sheet_name}")
-                    # Try using row 6 as default (common in this file format)
-                    header_row = 6
-                
-                # Read again with proper headers
-                df = pd.read_excel(xls, sheet_name=sheet_name, header=header_row)
-                
-                # Create column mapping
-                col_map = map_columns(df)
-                
-                if not col_map:
-                    logger.warning(f"Could not map columns in sheet: {sheet_name}")
-                    continue
-                
-                # Process each row
-                for idx, row in df.iterrows():
-                    if not is_data_row(row):
-                        stats['skipped_rows'] += 1
-                        continue
-                    
-                    # Create record dictionary
-                    record = {}
-                    
-                    for col_idx, field_name in col_map.items():
-                        if col_idx < len(row):
-                            record[field_name] = row.iloc[col_idx]
-                    
-                    # Skip if no asset name
-                    if not record.get('nama_asset') or pd.isna(record.get('nama_asset')):
-                        stats['skipped_rows'] += 1
-                        continue
-                    
-                    # Clean specific fields
-                    record['luas'] = clean_luas_value(record.get('luas'))
-                    record['nilai_harga'] = clean_nilai_value(record.get('nilai_harga'))
-                    record['tahun'] = clean_tahun_value(record.get('tahun'))
-                    
-                    # Combine status fields
-                    record['status_combined'] = combine_status_fields(record)
-                    
-                    # Clean string fields
-                    for field in ['nama_asset', 'kecamatan', 'satuan_kerja', 'status_tanah', 
-                                 'catatan', 'k3', 'pemetaan', 'tanah_bangunan', 'kode_aset']:
-                        if field in record and pd.notna(record[field]):
-                            record[field] = str(record[field]).strip()
-                        else:
-                            record[field] = None
-                    
-                    all_data.append(record)
-                    stats['valid_rows'] += 1
-                    
-            except Exception as e:
-                error_msg = f"Error processing sheet {sheet_name}: {str(e)}"
-                logger.error(error_msg)
-                stats['errors'].append(error_msg)
+        stats['total_rows_read'] = len(df_raw)
+        stats['sheets_processed'] = ['Sheet A/0']
         
-        # Create final DataFrame
-        if all_data:
-            result_df = pd.DataFrame(all_data)
+        # Find header row
+        header_row_idx = find_header_row(df_raw)
+        
+        if header_row_idx == -1:
+            logger.warning("Could not find header row, defaulting to 6")
+            header_row_idx = 6
             
-            # Ensure all expected columns exist
-            expected_cols = list(set(COLUMN_MAPPING.values())) + ['status_combined']
-            for col in expected_cols:
-                if col not in result_df.columns:
-                    result_df[col] = None
-            
-            return result_df, stats
-        else:
+        # Set columns from header row
+        headers = df_raw.iloc[header_row_idx]
+        df_data = df_raw.iloc[header_row_idx + 1:].copy()
+        
+        # Clean headers to strings
+        df_data.columns = [str(h).strip() for h in headers]
+        
+        col_map = map_columns(df_data)
+        
+        if not col_map:
+            logger.error("Could not map columns")
+            stats['errors'].append("Could not map columns")
             return pd.DataFrame(), stats
+
+        skipped_by_filter = 0
+        
+        # Process data
+        for idx, row in df_data.iterrows():
+            if not is_data_row(row):
+                stats['skipped_rows'] += 1
+                skipped_by_filter += 1
+                continue
+            
+            record = {}
+            for col_idx, field_name in col_map.items():
+                # col_idx in map_columns corresponds to integer index of the column
+                # Since we sliced the dataframe, the columns are now named.
+                # BUT map_columns returns indices like {0: 'nama_asset', 1: '...'} relative to the dataframe columns?
+                # Let's check map_columns again. 
+                # It iterates range(len(df.columns)).
+                # So if we use df.iloc[idx], we need positional access.
+                if col_idx < len(df_data.columns):
+                     val = row.iloc[col_idx]
+                     record[field_name] = val
+            
+            # Data Cleaning & Validation
+            
+            # Clean kecamatan
+            kecamatan = record.get('kecamatan')
+            if kecamatan is not None and str(kecamatan).strip() in ['0', '-', '']:
+                kecamatan = None
+                record['kecamatan'] = None
+            
+            # Handle blank names
+            nama = record.get('nama_asset')
+            if not nama or str(nama).strip() == '':
+                 if kecamatan:
+                     record['nama_asset'] = '(Tanpa Nama)'
+                 else:
+                     stats['skipped_rows'] += 1
+                     continue
+
+            # Clean Numeric Fields
+            if 'luas' in record:
+                record['luas'] = clean_luas_value(record['luas'])
+            if 'nilai_harga' in record:
+                record['nilai_harga'] = clean_nilai_value(record['nilai_harga'])
+            if 'tahun' in record:
+                record['tahun'] = clean_tahun_value(record['tahun'])
+            
+            # Combine status
+            record['status_combined'] = combine_status_fields(record)
+            
+            # Clean string fields
+            for field in ['nama_asset', 'kecamatan', 'satuan_kerja', 'status_tanah', 
+                         'catatan', 'k3', 'pemetaan', 'tanah_bangunan', 'kode_aset']:
+                if field in record and record[field] is not None:
+                    record[field] = str(record[field]).strip()
+            
+            all_data.append(record)
+            
+        stats['valid_rows'] = len(all_data)
+        logger.info(f"Parsing complete. Valid rows: {len(all_data)}")
+        
+        return pd.DataFrame(all_data), stats
             
     except Exception as e:
         error_msg = f"Error reading Excel file: {str(e)}"

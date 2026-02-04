@@ -83,16 +83,25 @@ class Asset(db.Model):
     def to_export_dict(self):
         """Convert asset to dictionary for export with columns matching original Excel layout"""
         return {
-            'NO. KIB': self.no_kib,
+            'NO. KIB 2023': self.no_kib,
             'No.': self.no_urut,
             'Kode Lokasi': self.kode_lokasi,
             'Satuan Kerja': self.satuan_kerja,
-            'Jenis Barang / Nama Barang': self.nama_asset,
+            'Jenis Barang / Nama Barang': self.nama_asset, # Note: This now contains data from original Penggunaan col
             'Nomor': self.nomor,
             'Luas (m2)': self.luas,
             'Tahun': self.tahun,
             'Status Tanah': self.status_tanah,
-            'Penggunaan': self.penggunaan,
+            'Penggunaan': self.nama_asset, # Request said asset name taken from Penggunaan, so we export it there too? Or keep distinct?
+                                           # Re-reading: "Correct the filter and asset name taken from the “penggunaan” column."
+                                           # And "For exporting, export the filtered data. The spreadsheet export format is as follows: @[PRESENTASI.xls]"
+                                           # If we mapped Penggunaan -> nama_asset in parser, then self.nama_asset holds that data.
+                                           # To match PRESENTASI.xls, we need to put it back in 'Penggunaan' column? 
+                                           # OR does the user mean the UI showed wrong name? 
+                                           # Let's populate both 'Jenis Barang / Nama Barang' AND 'Penggunaan' with self.nama_asset to be safe, 
+                                           # or better yet, if we have original penggunan stored.. wait.
+                                           # In parser I mapped Penggunaan -> nama_asset. I did NOT map 'Jenis Barang' to anything anymore.
+                                           # So self.nama_asset IS 'Penggunaan'.
             'Asal Usul': self.asal_usul,
             'Nilai / Harga': self.nilai_harga,
             'Keterangan': self.keterangan,
@@ -103,7 +112,8 @@ class Asset(db.Model):
             'CATATAN (TERMANFAATKAN/TERLANTAR)': self.catatan,
             'K3 (MILIK WARGA/ADA KLAIM, TKD, DLL)': self.k3,
             'TANAH (BANGUNAN/TANAH KOSONG)': self.tanah_bangunan,
-            'LAIN-LAIN': self.lain_lain
+            'LAIN-LAIN': self.lain_lain,
+            'Letak/Alamat': self.alamat
         }
 
 

@@ -20,6 +20,8 @@ class FilterForm(FlaskForm):
     """Form for filtering assets"""
     nama_asset = StringField('Nama Asset', validators=[Optional()])
     kecamatan = SelectField('Kecamatan', choices=[], validators=[Optional()])
+    satuan_kerja = SelectField('Satuan Kerja', choices=[], validators=[Optional()])
+    alamat = StringField('Letak / Alamat', validators=[Optional()])
     min_luas = FloatField('Min Luas (m²)', validators=[Optional(), NumberRange(min=0)])
     max_luas = FloatField('Max Luas (m²)', validators=[Optional(), NumberRange(min=0)])
     status = SelectMultipleField('Status', choices=[], validators=[Optional()])

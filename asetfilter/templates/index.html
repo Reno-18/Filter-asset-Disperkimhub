@@ -29,50 +29,33 @@
     </div>
 </div>
 
-<!-- Statistics Cards - The "Wow" Factor -->
-<div class="row g-3 mb-4">
-    <div class="col-sm-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon bg-primary">
-                <i class="bi bi-database"></i>
-            </div>
-            <div class="stat-content">
-                <h3 class="stat-value">{{ total_count }}</h3>
-                <p class="stat-label">Total Data</p>
-            </div>
+<!-- Statistics Cards - Full Width Grid (3 columns) -->
+<div class="stats-grid mb-4">
+    <div class="stat-card">
+        <div class="stat-icon bg-primary">
+            <i class="bi bi-database"></i>
+        </div>
+        <div class="stat-content">
+            <h3 class="stat-value">{{ total_count }}</h3>
+            <p class="stat-label">Total Data</p>
         </div>
     </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon bg-success">
-                <i class="bi bi-funnel"></i>
-            </div>
-            <div class="stat-content">
-                <h3 class="stat-value">{{ filtered_count }}</h3>
-                <p class="stat-label">Hasil Filter</p>
-            </div>
+    <div class="stat-card">
+        <div class="stat-icon bg-success">
+            <i class="bi bi-funnel"></i>
+        </div>
+        <div class="stat-content">
+            <h3 class="stat-value">{{ filtered_count }}</h3>
+            <p class="stat-label">Hasil Filter</p>
         </div>
     </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon bg-info">
-                <i class="bi bi-geo-alt"></i>
-            </div>
-            <div class="stat-content">
-                <h3 class="stat-value">{{ options.kecamatan_choices|length - 1 }}</h3>
-                <p class="stat-label">Kecamatan</p>
-            </div>
+    <div class="stat-card">
+        <div class="stat-icon bg-info">
+            <i class="bi bi-geo-alt"></i>
         </div>
-    </div>
-    <div class="col-sm-6 col-lg-3">
-        <div class="stat-card">
-            <div class="stat-icon bg-warning">
-                <i class="bi bi-tag"></i>
-            </div>
-            <div class="stat-content">
-                <h3 class="stat-value">{{ options.status_choices|length }}</h3>
-                <p class="stat-label">Status Unik</p>
-            </div>
+        <div class="stat-content">
+            <h3 class="stat-value">{{ options.kecamatan_choices|length - 1 }}</h3>
+            <p class="stat-label">Kecamatan</p>
         </div>
     </div>
 </div>
@@ -85,16 +68,14 @@
             Filter Data
         </h5>
         <div class="d-flex gap-2">
-            <a href="{{ url_for('export_csv') }}?{{ request.query_string.decode() }}"
-                class="btn btn-outline-success btn-sm">
+            <button onclick="exportData('csv')" class="btn btn-outline-success btn-sm">
                 <i class="bi bi-download"></i>
                 <span class="d-none d-md-inline">CSV</span>
-            </a>
-            <a href="{{ url_for('export_excel') }}?{{ request.query_string.decode() }}"
-                class="btn btn-outline-success btn-sm">
+            </button>
+            <button onclick="exportData('excel')" class="btn btn-outline-success btn-sm">
                 <i class="bi bi-file-earmark-excel"></i>
                 <span class="d-none d-md-inline">Excel</span>
-            </a>
+            </button>
         </div>
     </div>
     <div class="card-body">
@@ -117,6 +98,31 @@
                     <select class="form-select" id="kecamatan" name="kecamatan">
                         {% for value, label in options.kecamatan_choices %}
                         <option value="{{ value }}" {% if filters.kecamatan==value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Satuan Kerja -->
+                <div class="col-md-6 col-lg-3">
+                    <label for="satuan_kerja" class="form-label">Satuan Kerja</label>
+                    <select class="form-select" id="satuan_kerja" name="satuan_kerja">
+                        {% for value, label in options.satuan_kerja_choices %}
+                        <option value="{{ value }}" {% if filters.satuan_kerja==value %}selected{% endif %}>
+                            {{ label }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Alamat -->
+                <div class="col-md-6 col-lg-3">
+                    <label for="alamat" class="form-label">Letak / Alamat</label>
+                    <select class="form-select" id="alamat" name="alamat">
+                        <option value="">Semua Alamat</option>
+                        {% for value, label in options.alamat_choices %}
+                        <option value="{{ value }}" {% if filters.alamat==value %}selected{% endif %}>
                             {{ label }}
                         </option>
                         {% endfor %}
@@ -282,7 +288,7 @@
                         ('no_urut', 'No'),
                         ('nama_asset', 'Nama Asset'),
                         ('satuan_kerja', 'Satuan Kerja'),
-                        ('kecamatan', 'Kecamatan'),
+                        ('kecamatan', 'Kecamatan / Alamat'),
                         ('luas', 'Luas (m²)'),
                         ('tahun', 'Tahun'),
                         ('status_combined', 'Status'),
@@ -311,7 +317,12 @@
                         <td>
                             <span class="badge bg-info">{{ asset.satuan_kerja or '-' }}</span>
                         </td>
-                        <td>{{ asset.kecamatan or '-' }}</td>
+                        <td>
+                            {{ asset.kecamatan or '-' }}
+                            {% if asset.alamat %}
+                            <br><small class="text-muted"><i class="bi bi-geo-alt-fill"></i> {{ asset.alamat }}</small>
+                            {% endif %}
+                        </td>
                         <td class="text-end">{{ "%.2f"|format(asset.luas) if asset.luas else '-' }}</td>
                         <td class="text-center">{{ asset.tahun or '-' }}</td>
                         <td style="max-width: 200px;">
@@ -417,6 +428,20 @@
 
 {% block extra_js %}
 <script>
+    // Handle dynamic export with current filter values
+    function exportData(type) {
+        // Get the filter form
+        const form = document.getElementById('filter-form');
+        const formData = new FormData(form);
+        const params = new URLSearchParams(formData);
+
+        // Base URL based on type
+        let baseUrl = type === 'excel' ? "{{ url_for('export_excel') }}" : "{{ url_for('export_csv') }}";
+
+        // Redirect to export URL with params
+        window.location.href = `${baseUrl}?${params.toString()}`;
+    }
+
     // Handle sortable columns
     document.querySelectorAll('.sortable').forEach(th => {
         th.style.cursor = 'pointer';
