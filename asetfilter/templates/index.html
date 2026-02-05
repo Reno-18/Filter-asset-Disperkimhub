@@ -68,13 +68,9 @@
             Filter Data
         </h5>
         <div class="d-flex gap-2">
-            <button onclick="exportData('csv')" class="btn btn-outline-success btn-sm">
-                <i class="bi bi-download"></i>
-                <span class="d-none d-md-inline">CSV</span>
-            </button>
             <button onclick="exportData('excel')" class="btn btn-outline-success btn-sm">
                 <i class="bi bi-file-earmark-excel"></i>
-                <span class="d-none d-md-inline">Excel</span>
+                <span class="d-none d-md-inline">Export Excel</span>
             </button>
         </div>
     </div>
@@ -435,8 +431,8 @@
         const formData = new FormData(form);
         const params = new URLSearchParams(formData);
 
-        // Base URL based on type
-        let baseUrl = type === 'excel' ? "{{ url_for('export_excel') }}" : "{{ url_for('export_csv') }}";
+        // Base URL for Excel export
+        let baseUrl = "{{ url_for('export_excel') }}";
 
         // Redirect to export URL with params
         window.location.href = `${baseUrl}?${params.toString()}`;

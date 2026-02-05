@@ -113,7 +113,7 @@ class Asset(db.Model):
             'K3 (MILIK WARGA/ADA KLAIM, TKD, DLL)': self.k3,
             'TANAH (BANGUNAN/TANAH KOSONG)': self.tanah_bangunan,
             'LAIN-LAIN': self.lain_lain,
-            'Letak/Alamat': self.alamat
+            'Letak / Alamat': self.alamat
         }
 
 

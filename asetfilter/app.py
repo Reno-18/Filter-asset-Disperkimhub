@@ -427,64 +427,16 @@ def filter_ajax():
         return jsonify({'success': False, 'error': str(e)})
 
 
-@app.route('/export-csv')
-def export_csv():
-    """Export filtered data to CSV"""
-    try:
-        filters = {
-            'nama_asset': request.args.get('nama_asset', ''),
-            'kecamatan': request.args.get('kecamatan', ''),
-            'satuan_kerja': request.args.get('satuan_kerja', ''),
-            'alamat': request.args.get('alamat', ''),
-            'min_luas': request.args.get('min_luas', type=float),
-            'max_luas': request.args.get('max_luas', type=float),
-            'status': request.args.getlist('status'),
-            
-            # Detailed status filters
-            'status_tanah': request.args.get('status_tanah', ''),
-            'pemetaan': request.args.get('pemetaan', ''),
-            'catatan': request.args.get('catatan', ''),
-            'k3': request.args.get('k3', ''),
-            'tanah_bangunan': request.args.get('tanah_bangunan', ''),
-            'asal_usul': request.args.get('asal_usul', ''),
-            'lain_lain': request.args.get('lain_lain', '')
-        }
-        
-        query = Asset.query
-        query = apply_filters(query, filters)
-        assets = query.all()
-        
-        if not assets:
-            flash('Tidak ada data untuk diexport.', 'warning')
-            return redirect(url_for('index'))
-        
-        # Convert to DataFrame with proper column order
-        data = [asset.to_export_dict() for asset in assets]
-        df = pd.DataFrame(data)
-        
-        # Create CSV in memory
-        output = BytesIO()
-        df.to_csv(output, index=False, encoding='utf-8-sig')
-        output.seek(0)
-        
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'aset_filter_export_{timestamp}.csv'
-        
-        return send_file(
-            output,
-            mimetype='text/csv',
-            as_attachment=True,
-            download_name=filename
-        )
-        
-    except Exception as e:
-        flash(f'Error exporting CSV: {str(e)}', 'error')
-        return redirect(url_for('index'))
+
 
 
 @app.route('/export-excel')
 def export_excel():
-    """Export filtered data to Excel"""
+    """Export filtered data to Excel with multi-row header format matching Export_Filter.xlsx"""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, Border, Side
+    from openpyxl.utils import get_column_letter
+    
     try:
         filters = {
             'nama_asset': request.args.get('nama_asset', ''),
@@ -513,14 +465,119 @@ def export_excel():
             flash('Tidak ada data untuk diexport.', 'warning')
             return redirect(url_for('index'))
         
-        # Convert to DataFrame with proper column order
-        data = [asset.to_export_dict() for asset in assets]
-        df = pd.DataFrame(data)
+        # Create workbook with custom header format
+        wb = Workbook()
+        ws = wb.active
+        ws.title = 'Data Aset'
         
-        # Create Excel in memory
+        # Define styles
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        header_font = Font(bold=True)
+        red_font = Font(bold=True, color='FF0000')
+        center_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+        
+        # Define column structure matching Export_Filter.xlsx
+        # Row 1: Empty (for spacing like the original)
+        # Row 2-3: Headers with merged cells
+        # Data starts from row 4
+        
+        # Column mapping: (col_index, header_row1, header_row2, is_red, db_field)
+        columns = [
+            (1, 'NO. KIB 2023', None, False, 'no_kib'),
+            (2, 'No.', None, False, 'no_urut'),
+            (3, 'Kode Lokasi', None, False, 'kode_lokasi'),
+            (4, 'Satuan Kerja', None, False, 'satuan_kerja'),
+            (5, 'Jenis Barang / Nama Barang', None, False, 'nama_asset'),
+            (6, 'Nomor', 'Kd Barang', False, None),  # Sub-header only
+            (7, None, 'Reg', False, 'nomor'),
+            (8, 'Luas (m2)', None, False, 'luas'),
+            (9, 'Tahun', 'Pengadaan', False, 'tahun'),
+            (10, None, 'Letak / Alamat', False, 'alamat'),
+            (11, 'Status Tanah', 'Hak', False, 'status_tanah'),
+            (12, 'Sertifikat', 'Tanggal', False, None),  # Sub-header only
+            (13, None, 'No.', False, None),  # Sub-header only
+            (14, 'Penggunaan', None, False, 'nama_asset'),  # Using nama_asset as per model
+            (15, 'Asal Usul', None, False, 'asal_usul'),
+            (16, 'Nilai / Harga', None, False, 'nilai_harga'),
+            (17, 'Keterangan', None, False, 'keterangan'),
+            (18, 'Kode Aset', None, False, 'kode_aset'),
+            (19, 'JUMLAH BIDANG', None, True, 'jumlah_bidang'),
+            (20, 'KECAMATAN', None, True, 'kecamatan'),
+            (21, 'PEMETAAN ASET TANAH', None, True, 'pemetaan'),
+            (22, 'CATATAN (TERMANFAATKAN/TERLANTAR)', None, True, 'catatan'),
+            (23, 'K3 (MILIK WARGA/ADA KLAIM, TKD, DLL)', None, True, 'k3'),
+            (24, 'TANAH (BANGUNAN/TANAH KOSONG)', None, True, 'tanah_bangunan'),
+            (25, 'LAIN-LAIN', None, False, 'lain_lain'),
+        ]
+        
+        # Write headers - Row 3 (main headers) and Row 4 (sub-headers)
+        header_row1 = 3
+        header_row2 = 4
+        
+        for col_idx, header1, header2, is_red, _ in columns:
+            cell1 = ws.cell(row=header_row1, column=col_idx)
+            cell2 = ws.cell(row=header_row2, column=col_idx)
+            
+            if header1:
+                cell1.value = header1
+                cell1.font = red_font if is_red else header_font
+                cell1.alignment = center_align
+                cell1.border = thin_border
+                
+                # If no sub-header, merge cells vertically
+                if not header2:
+                    ws.merge_cells(start_row=header_row1, start_column=col_idx, 
+                                   end_row=header_row2, end_column=col_idx)
+            
+            if header2:
+                cell2.value = header2
+                cell2.font = header_font
+                cell2.alignment = center_align
+                cell2.border = thin_border
+            elif not header1:
+                # Part of a merged cell from above, still apply border
+                cell2.border = thin_border
+        
+        # Merge "Nomor" header across columns 6-7
+        ws.merge_cells(start_row=header_row1, start_column=6, end_row=header_row1, end_column=7)
+        
+        # Merge "Tahun" header across columns 9-10
+        ws.merge_cells(start_row=header_row1, start_column=9, end_row=header_row1, end_column=10)
+        
+        # Merge "Status Tanah" header across columns 11
+        # Merge "Sertifikat" header across columns 12-13
+        ws.merge_cells(start_row=header_row1, start_column=12, end_row=header_row1, end_column=13)
+        
+        # Write data starting from row 5
+        data_start_row = 5
+        for row_idx, asset in enumerate(assets, start=data_start_row):
+            for col_idx, _, _, _, db_field in columns:
+                if db_field:
+                    value = getattr(asset, db_field, None)
+                    cell = ws.cell(row=row_idx, column=col_idx, value=value)
+                    cell.border = thin_border
+                else:
+                    cell = ws.cell(row=row_idx, column=col_idx)
+                    cell.border = thin_border
+        
+        # Adjust column widths
+        column_widths = {
+            1: 12, 2: 5, 3: 12, 4: 25, 5: 30, 6: 10, 7: 8, 8: 10,
+            9: 10, 10: 25, 11: 12, 12: 10, 13: 8, 14: 20, 15: 12,
+            16: 15, 17: 20, 18: 15, 19: 12, 20: 15, 21: 18, 22: 30,
+            23: 30, 24: 25, 25: 15
+        }
+        for col_idx, width in column_widths.items():
+            ws.column_dimensions[get_column_letter(col_idx)].width = width
+        
+        # Save to BytesIO
         output = BytesIO()
-        with pd.ExcelWriter(output, engine='openpyxl') as writer:
-            df.to_excel(writer, index=False, sheet_name='Data Aset')
+        wb.save(output)
         output.seek(0)
         
         timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
